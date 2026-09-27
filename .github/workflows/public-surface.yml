@@ -1,0 +1,42 @@
+name: Public surface
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install disclosed research package
+        run: python -m pip install -e .
+      - name: Compile public package
+        run: python -m compileall -q src
+      - name: Run boundary tests
+        env:
+          PYTHONPATH: src
+        run: python -m unittest discover -s tests -v
+      - name: Validate SVG assets
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from xml.etree import ElementTree
+
+          for path in Path("assets").glob("*.svg"):
+              ElementTree.parse(path)
+              print(f"validated {path}")
+          PY
+      - name: Reject private artifact formats
+        run: |
+          if find . -type f \( -name '*.parquet' -o -name '*.pkl' -o -name '*.joblib' -o -name '*.onnx' -o -name '*.pem' -o -name '*.key' \) | grep -q .; then
+            echo "Private artifact format detected"
+            exit 1
+          fi
